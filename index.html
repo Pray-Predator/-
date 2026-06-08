@@ -1,691 +1,322 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>实习基地意向征集</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      padding: 20px;
-    }
-    .card {
-      background: white;
-      border-radius: 24px;
-      padding: 40px;
-      max-width: 500px;
-      margin: 40px auto;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-    }
-    .logo { font-size: 64px; text-align: center; margin-bottom: 16px; }
-    .title { font-size: 28px; font-weight: 700; color: #333; text-align: center; margin-bottom: 8px; }
-    .subtitle { font-size: 16px; color: #666; text-align: center; margin-bottom: 32px; }
-    
-    .input-group { margin-bottom: 24px; }
-    .input-label { font-size: 16px; color: #555; margin-bottom: 8px; display: block; }
-    .input-field {
-      width: 100%;
-      height: 56px;
-      border: 2px solid #e0e0e0;
-      border-radius: 12px;
-      padding: 0 16px;
-      font-size: 18px;
-    }
-    .input-field:focus { border-color: #667eea; outline: none; }
-    .error-text { color: #ff4757; font-size: 14px; margin-top: 8px; display: block; }
-    
-    .btn-primary {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      border-radius: 50px;
-      padding: 18px 48px;
-      font-size: 18px;
-      font-weight: 600;
-      cursor: pointer;
-      width: 100%;
-      margin-top: 12px;
-    }
-    
-    .btn-secondary {
-      background: white;
-      color: #667eea;
-      border: 2px solid #667eea;
-      border-radius: 50px;
-      padding: 18px 48px;
-      font-size: 18px;
-      font-weight: 600;
-      cursor: pointer;
-      width: 100%;
-      margin-top: 12px;
-    }
-    
-    .btn-reset {
-      background: #fff5f5;
-      color: #e53e3e;
-      border: 2px solid #e53e3e;
-      border-radius: 50px;
-      padding: 14px 32px;
-      font-size: 16px;
-      cursor: pointer;
-      width: 100%;
-      margin-top: 12px;
-    }
-    
-    .completion-info {
-      display: flex;
-      justify-content: space-around;
-      padding: 20px;
-      background: #f8f9fa;
-      border-radius: 16px;
-      margin-top: 24px;
-    }
-    .completion-number { font-size: 36px; font-weight: 700; color: #667eea; display: block; }
-    .completion-label { font-size: 14px; color: #666; text-align: center; }
-    
-    .page { display: none; }
-    .page.active { display: block; }
-    
-    .back-btn {
-      background: none;
-      border: none;
-      color: #667eea;
-      font-size: 16px;
-      cursor: pointer;
-      margin-bottom: 16px;
-    }
-    
-    .question-info { margin-bottom: 24px; padding: 16px; background: #f8f9fa; border-radius: 12px; }
-    .question-title { font-size: 16px; font-weight: 600; color: #333; margin-bottom: 8px; }
-    .question-desc { font-size: 14px; color: #666; }
-    
-    .sortable-list { margin-bottom: 24px; }
-    .base-item {
-      display: flex;
-      align-items: center;
-      padding: 16px;
-      background: #f8f9fa;
-      border-radius: 12px;
-      margin-bottom: 12px;
-      cursor: grab;
-      user-select: none;
-    }
-    .base-rank {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      font-weight: 600;
-      margin-right: 16px;
-    }
-    .base-name { flex: 1; font-size: 16px; color: #333; }
-    .base-grip { color: #999; font-size: 20px; }
-    
-    .drag-helper { position: fixed; z-index: 1000; pointer-events: none; box-shadow: 0 10px 40px rgba(0,0,0,0.2); opacity: 0.9; }
-    
-    .result-list { margin-bottom: 24px; }
-    .result-item {
-      display: flex;
-      align-items: center;
-      padding: 16px;
-      background: #f8f9fa;
-      border-radius: 12px;
-      margin-bottom: 12px;
-    }
-    .result-rank { width: 36px; font-size: 24px; margin-right: 16px; }
-    .result-name { flex: 1; font-weight: 600; }
-    .result-score { color: #667eea; font-weight: 600; }
-    
-    .stats-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .stats-table th, .stats-table td { border: 1px solid #e0e0e0; padding: 12px 8px; text-align: center; }
-    .stats-table th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-    
-    .info-section {
-      background: rgba(255,255,255,0.95);
-      border-radius: 16px;
-      padding: 24px;
-      max-width: 500px;
-      margin: 20px auto;
-    }
-    .info-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
-    .info-content { font-size: 14px; color: #666; line-height: 1.8; }
-    .info-content li { list-style: none; padding-left: 20px; position: relative; margin-bottom: 8px; }
-    .info-content li::before { content: '•'; position: absolute; left: 0; color: #667eea; }
-    
-    .footer-note { text-align: center; color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 40px; }
-    .loading { text-align: center; color: white; font-size: 18px; padding: 20px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>问卷提交系统</title>
+    <!-- 引入Supabase JS SDK v2（CDN方式，无需安装） -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        }
+
+        .title {
+            text-align: center;
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 32px;
+        }
+
+        .option-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .option-item {
+            display: flex;
+            align-items: center;
+            padding: 16px 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .option-item:hover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .option-item.selected {
+            border-color: #667eea;
+            background-color: #f0f4ff;
+        }
+
+        .option-number {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 600;
+            margin-right: 16px;
+            flex-shrink: 0;
+        }
+
+        .option-text {
+            font-size: 18px;
+            color: #374151;
+            flex: 1;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        /* 弹窗样式 */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .modal.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 16px;
+        }
+
+        .modal-text {
+            color: #6b7280;
+            margin-bottom: 24px;
+        }
+
+        .modal-btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-  <div id="loading-page" class="loading">正在连接服务器...</div>
-  
-  <div id="login-page" class="page">
-    <div class="card">
-      <div class="logo">🏢</div>
-      <h1 class="title">实习基地意愿排序</h1>
-      <p class="subtitle">请输入学号登录，参与班级实习基地排序</p>
-      
-      <div class="input-group">
-        <label class="input-label">学号</label>
-        <input id="student-id-input" type="text" class="input-field" placeholder="请输入您的学号" maxlength="10">
-        <span id="login-error" class="error-text"></span>
-      </div>
-      
-      <button class="btn-primary" onclick="handleLogin()">登 录</button>
-      <button class="btn-secondary" onclick="handleViewResult()">👁️ 查看结果</button>
-      <button class="btn-reset" onclick="handleClearData()">🗑️ 清空数据</button>
-      
-      <div class="completion-info">
-        <div>
-          <span class="completion-number" id="completed-count">0</span>
-          <span class="completion-label">已完成</span>
+    <div class="container">
+        <h1 class="title">请选择你所在的中心</h1>
+        
+        <div class="option-list">
+            <div class="option-item" data-value="丹东市中心">
+                <div class="option-number">1</div>
+                <div class="option-text">丹东市中心</div>
+            </div>
+            <div class="option-item" data-value="阜新矿总">
+                <div class="option-number">2</div>
+                <div class="option-text">阜新矿总</div>
+            </div>
+            <div class="option-item" data-value="抚顺市中心">
+                <div class="option-number">3</div>
+                <div class="option-text">抚顺市中心</div>
+            </div>
+            <div class="option-item" data-value="抚顺矿总">
+                <div class="option-number">4</div>
+                <div class="option-text">抚顺矿总</div>
+            </div>
+            <div class="option-item" data-value="阜新市中心">
+                <div class="option-number">5</div>
+                <div class="option-text">阜新市中心</div>
+            </div>
+            <div class="option-item" data-value="丹东第一">
+                <div class="option-number">6</div>
+                <div class="option-text">丹东第一</div>
+            </div>
+            <div class="option-item" data-value="省人民">
+                <div class="option-number">7</div>
+                <div class="option-text">省人民</div>
+            </div>
         </div>
-        <div>
-          <span class="completion-number">28</span>
-          <span class="completion-label">总人数</span>
+
+        <button class="submit-btn" id="submitBtn">提交</button>
+        
+        <div class="footer">
+            注：该程序最终解释权归Pray or Predator所有
         </div>
-      </div>
-    </div>
-    
-    <div class="info-section">
-      <h3 class="info-title">问卷说明</h3>
-      <ul class="info-content">
-        <li>请使用班级学号登录</li>
-        <li>登录后可填写实习基地意愿排序</li>
-        <li>每个学号只能提交一次</li>
-        <li>完成所有排序后方可提交</li>
-      </ul>
-    </div>
-  </div>
-
-  <div id="questionnaire-page" class="page">
-    <div class="card">
-      <button class="back-btn" onclick="showPage('login-page')">← 返回</button>
-      <h1 class="title">实习基地意愿排序</h1>
-      <p class="subtitle">请将以下7个实习基地按照最想去（第1位）到最不想去（第7位）的顺序拖动排序</p>
-      
-      <div class="question-info">
-        <h3 class="question-title">题目说明</h3>
-        <p class="question-desc">必须完成所有7个基地的排序才能提交</p>
-      </div>
-
-      <div id="sortable-list" class="sortable-list"></div>
-      <div id="drag-helper" class="drag-helper"></div>
-
-      <button class="btn-primary" onclick="handleSubmit()">确认提交</button>
-    </div>
-  </div>
-
-  <div id="result-page" class="page">
-    <div class="card">
-      <button class="back-btn" onclick="showPage('login-page')">← 返回登录</button>
-      <h1 class="title">班级实习基地综合排序</h1>
-      <p class="subtitle">基于 <span id="result-completed-count">0</span> 位同学的意愿统计</p>
-      <div id="result-list" class="result-list"></div>
     </div>
 
-    <div class="card">
-      <h2 class="subtitle">各基地排名次数统计表</h2>
-      <table class="stats-table">
-        <thead>
-          <tr><th>基地名称</th><th>第1名</th><th>第2名</th><th>第3名</th><th>第4名</th><th>第5名</th><th>第6名</th><th>第7名</th></tr>
-        </thead>
-        <tbody id="stats-table-body"></tbody>
-      </table>
+    <!-- 提示弹窗 -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <div class="modal-title" id="modalTitle">提示</div>
+            <div class="modal-text" id="modalText"></div>
+            <button class="modal-btn" id="modalBtn">确定</button>
+        </div>
     </div>
 
-    <div class="info-section">
-      <h3 class="info-title">计分规则说明</h3>
-      <ul class="info-content">
-        <li>排序第1位权值=7分，第2位=6分，第3位=5分，第4位=4分</li>
-        <li>排序第5位权值=3分，第6位=2分，第7位=1分</li>
-        <li>单个基地平均综合得分=Σ(该基地在某位置的频数×对应权值)÷总填写人数</li>
-        <li>得分越高表示综合排名越靠前</li>
-      </ul>
-    </div>
+    <script>
+        // ====================== 已帮你填好正确的配置 ======================
+        const SUPABASE_URL = 'https://axfniyotkeucqkiptjhq.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4Zm5peW90a2V1Y3FraXB0amhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NzM5MzYsImV4cCI6MjA5NjQ0OTkzNn0.DQnbDPjt7_j_MiGzd6bTPpJBzpKncmBw7RykktH0LQ4';
+        // ================================================================
 
-    <div class="info-section">
-      <h3 class="info-title">结果解读</h3>
-      <div id="result-analysis" class="info-content"></div>
-    </div>
-  </div>
+        // 初始化Supabase客户端
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  <div class="footer-note">注：该程序最终解释权归Pray or Predator所有</div>
+        // DOM元素
+        const optionItems = document.querySelectorAll('.option-item');
+        const submitBtn = document.getElementById('submitBtn');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalText = document.getElementById('modalText');
+        const modalBtn = document.getElementById('modalBtn');
 
-  <script>
-    const SUPABASE_URL = 'https://axfniyotkeucqkiptjqh.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4Zm5peW90a2V1Y3FraXB0amhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NzM5MzYsImV4cCI6MjA5NjQ0OTkzNn0.DQnbDPjt7_j_MiGzd6bTPpJBzpKncmBw7RykktH0LQ4';
-    
-    let supabaseClient = null;
-    let currentStudentId = null;
-    let sortedBases = [];
-    let isDragging = false;
-    let draggedElement = null;
-    let draggedIndex = -1;
-    let dragStartX = 0, dragStartY = 0;
+        // 选中的选项
+        let selectedValue = null;
 
-    const VALID_STUDENT_IDS = [
-      '2022340901','2022340902','2022340903','2022340904','2022340905',
-      '2020367122','2022340907','2022340908','2022340909','2022340910',
-      '2022340911','2022340912','2022340913','2022340914','2022340915',
-      '2022340916','2022340917','2022340918','2022340919','2022340920',
-      '2022340921','2022340922','2022340923','2022340924','2022340926',
-      '2022366226','2022353716','2022366228'
-    ];
-    
-    const BASES = ['抚顺矿总','抚顺市中心','阜新矿总','阜新市中心','丹东第一','丹东市中心','省人民'];
+        // 选项点击事件
+        optionItems.forEach(item => {
+            item.addEventListener('click', () => {
+                // 移除所有选中状态
+                optionItems.forEach(i => i.classList.remove('selected'));
+                // 添加当前选中状态
+                item.classList.add('selected');
+                // 保存选中值
+                selectedValue = item.dataset.value;
+            });
+        });
 
-    async function initSupabase() {
-      try {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-          global: {
-            fetch: (url, options = {}) => {
-              const controller = new AbortController();
-              const timeout = setTimeout(() => controller.abort(), 15000);
-              return fetch(url, {
-                ...options,
-                signal: controller.signal
-              }).finally(() => clearTimeout(timeout));
+        // 提交按钮点击事件
+        submitBtn.addEventListener('click', async () => {
+            // 检查是否选择了选项
+            if (!selectedValue) {
+                showModal('提示', '请先选择一个中心');
+                return;
             }
-          }
+
+            // 禁用提交按钮，防止重复提交
+            submitBtn.disabled = true;
+            submitBtn.textContent = '提交中...';
+
+            try {
+                // 插入数据到Supabase数据库（完全匹配你的表结构）
+                const { data, error } = await supabase
+                    .from('student_answers')
+                    .insert([
+                        {
+                            student_id: crypto.randomUUID(), // 自动生成唯一学生ID（满足UNIQUE约束）
+                            answers: selectedValue // 存储用户选择的中心名称
+                        }
+                    ]);
+
+                if (error) throw error;
+
+                // 提交成功
+                showModal('提交成功', '你的选择已成功提交！');
+                // 重置选中状态
+                optionItems.forEach(i => i.classList.remove('selected'));
+                selectedValue = null;
+
+            } catch (error) {
+                console.error('提交失败详细信息:', error);
+                // 提交失败
+                showModal('提交失败', `错误信息：${error.message}`);
+            } finally {
+                // 恢复提交按钮状态
+                submitBtn.disabled = false;
+                submitBtn.textContent = '提交';
+            }
         });
-        const { data, error } = await supabaseClient.auth.getSession();
-        if (error) console.error('Supabase auth error:', error);
-        console.log('Supabase initialized successfully');
-        await ensureTableExists();
-        return true;
-      } catch (e) {
-        console.error('Failed to initialize Supabase:', e);
-        return false;
-      }
-    }
 
-    async function ensureTableExists() {
-      try {
-        const { data, error } = await supabaseClient.from('student_answers').select('*').limit(1);
-        if (error && error.code === '42P01') {
-          await createTables();
+        // 显示弹窗
+        function showModal(title, text) {
+            modalTitle.textContent = title;
+            modalText.textContent = text;
+            modal.classList.add('show');
         }
-      } catch (e) {
-        console.log('Table check error:', e);
-      }
-    }
 
-    async function createTables() {
-      const createTableQuery = `
-        CREATE TABLE student_answers (
-          id SERIAL PRIMARY KEY,
-          student_id TEXT UNIQUE NOT NULL,
-          answers TEXT NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `;
-      try {
-        await supabaseClient.rpc('execute_sql', { sql: createTableQuery });
-      } catch (e) {
-        console.log('Table creation error (may already exist):', e);
-      }
-    }
-
-    function saveToLocal(key, value) {
-      try { localStorage.setItem(key, JSON.stringify(value)); } catch(e) {}
-    }
-    
-    function getFromLocal(key, defaultValue) {
-      try {
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : defaultValue;
-      } catch(e) { return defaultValue; }
-    }
-
-    let cachedCompletedStudents = null;
-    let cacheTime = 0;
-    
-    async function withRetry(fn, maxRetries = 2) {
-      let lastError;
-      for (let i = 0; i <= maxRetries; i++) {
-        try {
-          return await fn();
-        } catch (e) {
-          lastError = e;
-          if (i < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-          }
-        }
-      }
-      throw lastError;
-    }
-    
-    async function getCompletedStudents() {
-      if (cachedCompletedStudents && Date.now() - cacheTime < 30000) {
-        return cachedCompletedStudents;
-      }
-      
-      try {
-        const { data, error } = await withRetry(() => 
-          supabaseClient.from('student_answers').select('student_id')
-        );
-        if (error) throw error;
-        cachedCompletedStudents = data.map(item => item.student_id);
-        cacheTime = Date.now();
-        return cachedCompletedStudents;
-      } catch (e) {
-        console.error('Error getting completed students:', e);
-        return cachedCompletedStudents || [];
-      }
-    }
-
-    async function getStudentAnswers() {
-      try {
-        const { data, error } = await supabaseClient.from('student_answers').select('*');
-        if (error) throw error;
-        const answers = {};
-        data.forEach(item => {
-          answers[item.student_id] = JSON.parse(item.answers);
+        // 关闭弹窗
+        modalBtn.addEventListener('click', () => {
+            modal.classList.remove('show');
         });
-        return answers;
-      } catch (e) {
-        console.error('Error getting student answers:', e);
-        return {};
-      }
-    }
 
-    async function saveStudentAnswer(studentId, answers) {
-      try {
-        const { error } = await withRetry(() => 
-          supabaseClient.from('student_answers').upsert({
-            student_id: studentId,
-            answers: JSON.stringify(answers)
-          })
-        );
-        if (error) {
-          console.error('Supabase error:', error);
-          if (error.code === '401' || error.code === '403') {
-            alert('数据库权限错误，请联系管理员配置访问策略');
-          } else {
-            alert(`提交失败: ${error.message || '网络错误，请重试'}`);
-          }
-          return false;
-        }
-        return true;
-      } catch (e) {
-        console.error('Error saving student answer:', e);
-        alert('提交失败，请检查网络连接后重试');
-        return false;
-      }
-    }
-
-    async function clearAllData() {
-      try {
-        const { error } = await supabaseClient.from('student_answers').delete().neq('id', 0);
-        if (error) throw error;
-        return true;
-      } catch (e) {
-        console.error('Error clearing data:', e);
-        return false;
-      }
-    }
-
-    function showPage(pageId) {
-      document.querySelectorAll('.page').forEach(page => page.style.display = 'none');
-      document.getElementById(pageId).style.display = 'block';
-    }
-
-    function renderSortableList() {
-      const list = document.getElementById('sortable-list');
-      list.innerHTML = '';
-      sortedBases.forEach((base, index) => {
-        const div = document.createElement('div');
-        div.className = 'base-item';
-        div.dataset.index = index;
-        div.innerHTML = `<div class="base-rank">${index + 1}</div><div class="base-name">${base}</div><div class="base-grip">⋮⋮</div>`;
-        div.onmousedown = (e) => handleDragStart(e, index);
-        div.ontouchstart = (e) => handleDragStart(e, index);
-        list.appendChild(div);
-      });
-    }
-
-    function handleDragStart(e, index) {
-      e.preventDefault();
-      isDragging = true;
-      draggedIndex = index;
-      draggedElement = e.target.closest('.base-item');
-      
-      const rect = draggedElement.getBoundingClientRect();
-      const touch = e.touches ? e.touches[0] : null;
-      dragStartX = (touch ? touch.clientX : e.clientX) - rect.left;
-      dragStartY = (touch ? touch.clientY : e.clientY) - rect.top;
-      
-      const helper = document.getElementById('drag-helper');
-      helper.innerHTML = draggedElement.innerHTML;
-      helper.style.display = 'block';
-      helper.style.left = rect.left + 'px';
-      helper.style.top = rect.top + 'px';
-      helper.style.width = rect.width + 'px';
-      helper.className = 'base-item drag-helper';
-      
-      draggedElement.style.opacity = '0';
-      
-      document.onmousemove = handleDragMove;
-      document.ontouchmove = handleDragMove;
-      document.onmouseup = handleDragEnd;
-      document.ontouchend = handleDragEnd;
-    }
-
-    function handleDragMove(e) {
-      if (!isDragging) return;
-      const touch = e.touches ? e.touches[0] : null;
-      const x = touch ? touch.clientX : e.clientX;
-      const y = touch ? touch.clientY : e.clientY;
-      
-      const helper = document.getElementById('drag-helper');
-      helper.style.left = (x - dragStartX) + 'px';
-      helper.style.top = (y - dragStartY) + 'px';
-      
-      const container = document.getElementById('sortable-list');
-      const items = Array.from(container.querySelectorAll('.base-item'));
-      let targetIndex = -1;
-      
-      items.forEach((item, idx) => {
-        if (item === draggedElement) return;
-        const rect = item.getBoundingClientRect();
-        if (y < rect.bottom && y > rect.top) {
-          targetIndex = parseInt(item.dataset.index);
-        }
-      });
-      
-      if (targetIndex !== -1 && targetIndex !== draggedIndex) {
-        const item = sortedBases.splice(draggedIndex, 1)[0];
-        sortedBases.splice(targetIndex, 0, item);
-        draggedIndex = targetIndex;
-        renderSortableList();
-      }
-    }
-
-    function handleDragEnd() {
-      isDragging = false;
-      document.getElementById('drag-helper').style.display = 'none';
-      renderSortableList();
-      document.onmousemove = null;
-      document.onmouseup = null;
-      document.ontouchmove = null;
-      document.ontouchend = null;
-    }
-
-    async function handleLogin() {
-      const input = document.getElementById('student-id-input');
-      const errorEl = document.getElementById('login-error');
-      const loginBtn = document.querySelector('#login-page .btn-primary');
-      const studentId = input.value.trim();
-      
-      if (!VALID_STUDENT_IDS.includes(studentId)) {
-        errorEl.textContent = '请输入有效的学号';
-        return;
-      }
-      
-      const deviceStudentId = getFromLocal('device_student_id', null);
-      if (deviceStudentId !== null && deviceStudentId !== studentId) {
-        errorEl.textContent = `该设备已绑定学号 ${deviceStudentId}，请使用该学号登录`;
-        return;
-      }
-      
-      const originalText = loginBtn.textContent;
-      loginBtn.textContent = '验证中...';
-      loginBtn.disabled = true;
-      
-      try {
-        const completed = await getCompletedStudents();
-        if (completed.includes(studentId)) {
-          errorEl.textContent = '您已经提交过问卷了';
-          return;
-        }
-        
-        currentStudentId = studentId;
-        errorEl.textContent = '';
-        input.value = '';
-        sortedBases = [...BASES];
-        renderSortableList();
-        showPage('questionnaire-page');
-      } catch (e) {
-        console.error('Login error:', e);
-        errorEl.textContent = '验证失败，请检查网络连接后重试';
-      } finally {
-        loginBtn.textContent = originalText;
-        loginBtn.disabled = false;
-      }
-    }
-
-    async function handleSubmit() {
-      const submitBtn = document.querySelector('#questionnaire-page .btn-primary');
-      const originalText = submitBtn.textContent;
-      submitBtn.textContent = '提交中...';
-      submitBtn.disabled = true;
-      
-      const success = await saveStudentAnswer(currentStudentId, sortedBases);
-      
-      submitBtn.textContent = originalText;
-      submitBtn.disabled = false;
-      
-      if (!success) {
-        return;
-      }
-      
-      saveToLocal('device_student_id', currentStudentId);
-      
-      alert('您已完成问卷！感谢您的参与！');
-      showPage('login-page');
-      updateCompletedCount();
-    }
-
-    async function handleViewResult() {
-      const resultBtn = document.querySelector('#login-page .btn-secondary');
-      const originalText = resultBtn.textContent;
-      resultBtn.textContent = '加载中...';
-      resultBtn.disabled = true;
-      
-      try {
-        const completed = await getCompletedStudents();
-        
-        if (completed.length === VALID_STUDENT_IDS.length) {
-          await renderResults();
-          showPage('result-page');
-        } else {
-          alert(`当前已完成 ${completed.length}/28 人\n请等待所有同学填写完毕后再查看结果`);
-        }
-      } catch (e) {
-        console.error('Error viewing result:', e);
-        alert('获取结果失败，请检查网络连接后重试');
-      } finally {
-        resultBtn.textContent = originalText;
-        resultBtn.disabled = false;
-      }
-    }
-
-    async function handleClearData() {
-      if (confirm('确定要清空所有数据吗？此操作不可撤销！')) {
-        const success = await clearAllData();
-        if (success) {
-          localStorage.removeItem('device_student_id');
-          alert('数据已清空');
-          updateCompletedCount();
-        } else {
-          alert('清空失败');
-        }
-      }
-    }
-
-    async function updateCompletedCount() {
-      const completed = await getCompletedStudents();
-      document.getElementById('completed-count').textContent = completed.length;
-    }
-
-    async function renderResults() {
-      const allAnswers = await getStudentAnswers();
-      const allAnswersArray = Object.values(allAnswers);
-      const completedCount = allAnswersArray.length;
-      
-      document.getElementById('result-completed-count').textContent = completedCount;
-      
-      const stats = {};
-      BASES.forEach(base => { stats[base] = [0,0,0,0,0,0,0]; });
-      
-      allAnswersArray.forEach(answer => {
-        answer.forEach((base, index) => { if (stats[base]) stats[base][index]++; });
-      });
-      
-      const scores = BASES.map(base => {
-        let sum = 0;
-        for (let i = 0; i < 7; i++) sum += stats[base][i] * (7 - i);
-        return { base, score: sum / completedCount, stats: stats[base] };
-      });
-      
-      scores.sort((a, b) => b.score - a.score);
-      
-      const listEl = document.getElementById('result-list');
-      listEl.innerHTML = '';
-      const medals = ['🥇', '🥈', '🥉'];
-      scores.forEach((item, index) => {
-        const div = document.createElement('div');
-        div.className = 'result-item';
-        div.innerHTML = `<div class="result-rank">${medals[index] || (index + 1)}</div><div class="result-name">${item.base}</div><div class="result-score">${item.score.toFixed(2)} 分</div>`;
-        listEl.appendChild(div);
-      });
-      
-      const tableBody = document.getElementById('stats-table-body');
-      tableBody.innerHTML = '';
-      scores.forEach(item => {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td>${item.base}</td>${item.stats.map(count => `<td>${count}</td>`).join('')}`;
-        tableBody.appendChild(row);
-      });
-      
-      const analysisEl = document.getElementById('result-analysis');
-      if (scores.length >= 3) {
-        analysisEl.innerHTML = `<strong>推荐首选基地：</strong>${scores[0].base}（综合得分 ${scores[0].score.toFixed(2)}）<br><br><strong>备选基地：</strong>${scores[1].base}、${scores[2].base}<br><br>此结果基于 ${completedCount} 位同学的意愿统计。`;
-      }
-    }
-
-    async function init() {
-      const success = await initSupabase();
-      document.getElementById('loading-page').style.display = 'none';
-      if (success) {
-        showPage('login-page');
-        await updateCompletedCount();
-      } else {
-        alert('连接服务器失败，请检查网络连接后重试');
-      }
-    }
-
-    document.addEventListener('DOMContentLoaded', init);
-  </script>
+        // 点击弹窗外部关闭
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('show');
+            }
+        });
+    </script>
 </body>
 </html>
