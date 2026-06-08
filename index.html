@@ -286,7 +286,18 @@
 
     async function initSupabase() {
       try {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          global: {
+            fetch: (url, options = {}) => {
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 15000);
+              return fetch(url, {
+                ...options,
+                signal: controller.signal
+              }).finally(() => clearTimeout(timeout));
+            }
+          }
+        });
         const { data, error } = await supabaseClient.auth.getSession();
         if (error) console.error('Supabase auth error:', error);
         console.log('Supabase initialized successfully');
@@ -336,14 +347,40 @@
       } catch(e) { return defaultValue; }
     }
 
+    let cachedCompletedStudents = null;
+    let cacheTime = 0;
+    
+    async function withRetry(fn, maxRetries = 2) {
+      let lastError;
+      for (let i = 0; i <= maxRetries; i++) {
+        try {
+          return await fn();
+        } catch (e) {
+          lastError = e;
+          if (i < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+          }
+        }
+      }
+      throw lastError;
+    }
+    
     async function getCompletedStudents() {
+      if (cachedCompletedStudents && Date.now() - cacheTime < 30000) {
+        return cachedCompletedStudents;
+      }
+      
       try {
-        const { data, error } = await supabaseClient.from('student_answers').select('student_id');
+        const { data, error } = await withRetry(() => 
+          supabaseClient.from('student_answers').select('student_id')
+        );
         if (error) throw error;
-        return data.map(item => item.student_id);
+        cachedCompletedStudents = data.map(item => item.student_id);
+        cacheTime = Date.now();
+        return cachedCompletedStudents;
       } catch (e) {
         console.error('Error getting completed students:', e);
-        return [];
+        return cachedCompletedStudents || [];
       }
     }
 
@@ -368,10 +405,19 @@
           student_id: studentId,
           answers: JSON.stringify(answers)
         });
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase error:', error);
+          if (error.code === '401' || error.code === '403') {
+            alert('数据库权限错误，请联系管理员配置访问策略');
+          } else {
+            alert(`提交失败: ${error.message || '网络错误，请重试'}`);
+          }
+          return false;
+        }
         return true;
       } catch (e) {
         console.error('Error saving student answer:', e);
+        alert('提交失败，请检查网络连接后重试');
         return false;
       }
     }
@@ -476,6 +522,7 @@
     async function handleLogin() {
       const input = document.getElementById('student-id-input');
       const errorEl = document.getElementById('login-error');
+      const loginBtn = document.querySelector('#login-page .btn-primary');
       const studentId = input.value.trim();
       
       if (!VALID_STUDENT_IDS.includes(studentId)) {
@@ -489,24 +536,44 @@
         return;
       }
       
-      const completed = await getCompletedStudents();
-      if (completed.includes(studentId)) {
-        errorEl.textContent = '您已经提交过问卷了';
-        return;
-      }
+      const originalText = loginBtn.textContent;
+      loginBtn.textContent = '验证中...';
+      loginBtn.disabled = true;
       
-      currentStudentId = studentId;
-      errorEl.textContent = '';
-      input.value = '';
-      sortedBases = [...BASES];
-      renderSortableList();
-      showPage('questionnaire-page');
+      try {
+        const completed = await getCompletedStudents();
+        if (completed.includes(studentId)) {
+          errorEl.textContent = '您已经提交过问卷了';
+          return;
+        }
+        
+        currentStudentId = studentId;
+        errorEl.textContent = '';
+        input.value = '';
+        sortedBases = [...BASES];
+        renderSortableList();
+        showPage('questionnaire-page');
+      } catch (e) {
+        console.error('Login error:', e);
+        errorEl.textContent = '验证失败，请检查网络连接后重试';
+      } finally {
+        loginBtn.textContent = originalText;
+        loginBtn.disabled = false;
+      }
     }
 
     async function handleSubmit() {
+      const submitBtn = document.querySelector('#questionnaire-page .btn-primary');
+      const originalText = submitBtn.textContent;
+      submitBtn.textContent = '提交中...';
+      submitBtn.disabled = true;
+      
       const success = await saveStudentAnswer(currentStudentId, sortedBases);
+      
+      submitBtn.textContent = originalText;
+      submitBtn.disabled = false;
+      
       if (!success) {
-        alert('提交失败，请重试');
         return;
       }
       
@@ -518,13 +585,26 @@
     }
 
     async function handleViewResult() {
-      const completed = await getCompletedStudents();
+      const resultBtn = document.querySelector('#login-page .btn-secondary');
+      const originalText = resultBtn.textContent;
+      resultBtn.textContent = '加载中...';
+      resultBtn.disabled = true;
       
-      if (completed.length === VALID_STUDENT_IDS.length) {
-        await renderResults();
-        showPage('result-page');
-      } else {
-        alert(`当前已完成 ${completed.length}/28 人\n请等待所有同学填写完毕后再查看结果`);
+      try {
+        const completed = await getCompletedStudents();
+        
+        if (completed.length === VALID_STUDENT_IDS.length) {
+          await renderResults();
+          showPage('result-page');
+        } else {
+          alert(`当前已完成 ${completed.length}/28 人\n请等待所有同学填写完毕后再查看结果`);
+        }
+      } catch (e) {
+        console.error('Error viewing result:', e);
+        alert('获取结果失败，请检查网络连接后重试');
+      } finally {
+        resultBtn.textContent = originalText;
+        resultBtn.disabled = false;
       }
     }
 
