@@ -401,10 +401,12 @@
 
     async function saveStudentAnswer(studentId, answers) {
       try {
-        const { error } = await supabaseClient.from('student_answers').upsert({
-          student_id: studentId,
-          answers: JSON.stringify(answers)
-        });
+        const { error } = await withRetry(() => 
+          supabaseClient.from('student_answers').upsert({
+            student_id: studentId,
+            answers: JSON.stringify(answers)
+          })
+        );
         if (error) {
           console.error('Supabase error:', error);
           if (error.code === '401' || error.code === '403') {
