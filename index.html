@@ -6,7 +6,7 @@
   <title>实习基地意向征集</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    /* 原有样式完全保留，无修改 */
+    /* 原有样式完全保留，无任何修改 */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -263,9 +263,8 @@
   <div class="footer-note">注：该程序最终解释权归Pray or Predator所有</div>
 
   <script>
-    // ======================== 仅修改Supabase配置和核心交互逻辑 ========================
-    // 请替换为你自己的Supabase URL和Anon Key
-    const SUPABASE_URL = 'https://axfniyotkeucqkiptjqh.supabase.co';
+    // ======================== 已配置好你的Supabase信息 ========================
+    const SUPABASE_URL = 'https://axfniyotkeucqkiptjhq.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4Zm5peW90a2V1Y3FraXB0amhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NzM5MzYsImV4cCI6MjA5NjQ0OTkzNn0.DQnbDPjt7_j_MiGzd6bTPpJBzpKncmBw7RykktH0LQ4';
     
     let supabaseClient = null;
@@ -287,41 +286,17 @@
     
     const BASES = ['抚顺矿总','抚顺市中心','阜新矿总','阜新市中心','丹东第一','丹东市中心','省人民'];
 
-    // ======================== 修改点1：优化Supabase初始化逻辑 ========================
+    // 初始化Supabase客户端
     async function initSupabase() {
       try {
-        // 初始化Supabase客户端（增加超时和重试配置）
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-          auth: {
-            persistSession: false, // 禁用会话持久化，避免权限问题
-            autoRefreshToken: false
-          },
-          global: {
-            fetch: (url, options = {}) => {
-              const controller = new AbortController();
-              // 延长超时时间到20秒
-              const timeout = setTimeout(() => controller.abort(), 20000);
-              return fetch(url, {
-                ...options,
-                signal: controller.signal,
-                headers: {
-                  ...options.headers,
-                  'Content-Type': 'application/json'
-                }
-              }).finally(() => clearTimeout(timeout));
-            }
-          }
+          auth: { persistSession: false, autoRefreshToken: false },
+          global: { fetch: (url, options = {}) => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 20000);
+            return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeout));
+          }}
         });
-        
-        // 验证连接
-        const { data: authData, error: authError } = await supabaseClient.auth.getSession();
-        if (authError) console.warn('Supabase auth警告（非致命）:', authError.message);
-        
-        console.log('Supabase初始化成功');
-        
-        // 检查表是否存在，不存在则提示手动创建（替代原有的自动创建逻辑，避免RPC权限问题）
-        await checkOrPromptTable();
-        
         return true;
       } catch (e) {
         console.error('Supabase初始化失败:', e);
@@ -329,28 +304,7 @@
       }
     }
 
-    // ======================== 修改点2：替换自动建表为手动提示 ========================
-    async function checkOrPromptTable() {
-      try {
-        // 尝试查询表，检测是否存在
-        const { error } = await supabaseClient.from('student_answers').select('id').limit(1);
-        if (error && error.code === '42P01') {
-          // 表不存在，提示手动创建
-          console.warn('表student_answers不存在，请在Supabase控制台手动创建！');
-          alert('请先在Supabase控制台创建表student_answers，表结构：\n' +
-                'id: SERIAL PRIMARY KEY\n' +
-                'student_id: TEXT UNIQUE NOT NULL\n' +
-                'answers: TEXT NOT NULL\n' +
-                'created_at: TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
-        } else if (error) {
-          console.error('检查表失败:', error);
-        }
-      } catch (e) {
-        console.log('表检查异常:', e);
-      }
-    }
-
-    // 原有本地存储逻辑不变
+    // 本地存储工具函数
     function saveToLocal(key, value) {
       try { localStorage.setItem(key, JSON.stringify(value)); } catch(e) {}
     }
@@ -362,10 +316,11 @@
       } catch(e) { return defaultValue; }
     }
 
+    // 缓存已完成学生列表
     let cachedCompletedStudents = null;
     let cacheTime = 0;
     
-    // 原有重试逻辑不变
+    // 带重试的请求函数
     async function withRetry(fn, maxRetries = 2) {
       let lastError;
       for (let i = 0; i <= maxRetries; i++) {
@@ -373,31 +328,25 @@
           return await fn();
         } catch (e) {
           lastError = e;
-          if (i < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-          }
+          if (i < maxRetries) await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
         }
       }
       throw lastError;
     }
     
-    // ======================== 修改点3：优化已完成学生查询逻辑 ========================
+    // 获取已完成学生列表
     async function getCompletedStudents() {
       if (cachedCompletedStudents && Date.now() - cacheTime < 30000) {
         return cachedCompletedStudents;
       }
       
       try {
-        // 增加查询条件，避免空数据问题
         const { data, error } = await withRetry(() => 
-          supabaseClient.from('student_answers')
-            .select('student_id')
-            .neq('student_id', '') // 过滤空学号
-            .order('created_at', { ascending: false })
+          supabaseClient.from('student_answers').select('student_id').order('created_at', { ascending: false })
         );
         
         if (error) throw error;
-        cachedCompletedStudents = data.map(item => item.student_id).filter(Boolean); // 去空
+        cachedCompletedStudents = data.map(item => item.student_id);
         cacheTime = Date.now();
         return cachedCompletedStudents;
       } catch (e) {
@@ -406,18 +355,15 @@
       }
     }
 
-    // 原有获取所有答案逻辑不变
+    // 获取所有学生答案
     async function getStudentAnswers() {
       try {
         const { data, error } = await supabaseClient.from('student_answers').select('*');
         if (error) throw error;
         const answers = {};
         data.forEach(item => {
-          try {
-            answers[item.student_id] = JSON.parse(item.answers);
-          } catch (e) {
-            console.warn('解析答案失败:', item.student_id, e);
-          }
+          try { answers[item.student_id] = JSON.parse(item.answers); }
+          catch (e) { console.warn('解析答案失败:', item.student_id, e); }
         });
         return answers;
       } catch (e) {
@@ -426,67 +372,55 @@
       }
     }
 
-    // ======================== 修改点4：优化数据提交逻辑 ========================
+    // 保存学生答案
     async function saveStudentAnswer(studentId, answers) {
       if (!supabaseClient) {
-        alert('数据库连接未初始化，请刷新页面重试');
+        alert('数据库连接失败，请刷新页面重试');
         return false;
       }
       
       try {
-        // 使用upsert确保幂等性，增加on conflict处理
         const { error } = await withRetry(() => 
-          supabaseClient.from('student_answers')
-            .upsert([{
-              student_id: studentId,
-              answers: JSON.stringify(answers),
-              created_at: new Date().toISOString()
-            }], {
-              onConflict: 'student_id' // 指定唯一键冲突时更新
-            })
+          supabaseClient.from('student_answers').upsert([{
+            student_id: studentId,
+            answers: JSON.stringify(answers)
+          }], { onConflict: 'student_id' })
         );
         
         if (error) {
-          console.error('提交数据失败:', error);
-          // 更友好的错误提示
           if (error.code === '23505') {
             alert('该学号已提交过问卷，无法重复提交');
-          } else if (['401', '403', '42501'].includes(error.code)) {
-            alert('数据库权限不足，请检查Supabase的RLS策略和表权限');
           } else {
             alert(`提交失败: ${error.message || '网络异常，请稍后重试'}`);
           }
           return false;
         }
         
-        // 提交成功后清空缓存
         cachedCompletedStudents = null;
         return true;
       } catch (e) {
         console.error('保存答案异常:', e);
-        alert('提交失败，请检查网络连接或联系管理员');
+        alert('提交失败，请检查网络连接');
         return false;
       }
     }
 
-    // ======================== 修改点5：优化清空数据逻辑 ========================
+    // 清空所有数据
     async function clearAllData() {
       try {
         const { error } = await withRetry(() => 
           supabaseClient.from('student_answers').delete().not('id', 'is', null)
         );
         if (error) {
-          console.error('清空数据失败:', error);
-          alert(`清空失败: ${error.message || '权限不足，请检查RLS策略'}`);
+          alert(`清空失败: ${error.message || '权限不足'}`);
           return false;
         }
-        // 清空缓存和本地存储
         cachedCompletedStudents = null;
         localStorage.removeItem('device_student_id');
         return true;
       } catch (e) {
         console.error('清空数据异常:', e);
-        alert('清空失败，请联系管理员');
+        alert('清空失败');
         return false;
       }
     }
@@ -671,11 +605,8 @@
       if (confirm('确定要清空所有数据吗？此操作不可撤销！')) {
         const success = await clearAllData();
         if (success) {
-          localStorage.removeItem('device_student_id');
           alert('数据已清空');
           updateCompletedCount();
-        } else {
-          alert('清空失败');
         }
       }
     }
