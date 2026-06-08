@@ -6,7 +6,6 @@
   <title>实习基地意向征集</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    /* 原有样式完全保留，无任何修改 */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -263,7 +262,7 @@
   <div class="footer-note">注：该程序最终解释权归Pray or Predator所有</div>
 
   <script>
-    // ======================== 已配置好你的Supabase信息 ========================
+    // Supabase配置信息
     const SUPABASE_URL = 'https://axfniyotkeucqkiptjhq.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4Zm5peW90a2V1Y3FraXB0amhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NzM5MzYsImV4cCI6MjA5NjQ0OTkzNn0.DQnbDPjt7_j_MiGzd6bTPpJBzpKncmBw7RykktH0LQ4';
     
@@ -275,6 +274,7 @@
     let draggedIndex = -1;
     let dragStartX = 0, dragStartY = 0;
 
+    // 有效学号列表
     const VALID_STUDENT_IDS = [
       '2022340901','2022340902','2022340903','2022340904','2022340905',
       '2020367122','2022340907','2022340908','2022340909','2022340910',
@@ -284,19 +284,33 @@
       '2022366226','2022353716','2022366228'
     ];
     
+    // 实习基地列表
     const BASES = ['抚顺矿总','抚顺市中心','阜新矿总','阜新市中心','丹东第一','丹东市中心','省人民'];
 
     // 初始化Supabase客户端
     async function initSupabase() {
       try {
+        // 确保supabase全局对象存在
+        if (!window.supabase) {
+          console.error('Supabase SDK未加载');
+          return false;
+        }
+        
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
           auth: { persistSession: false, autoRefreshToken: false },
-          global: { fetch: (url, options = {}) => {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 20000);
-            return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeout));
-          }}
+          global: { 
+            fetch: (url, options = {}) => {
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 20000);
+              return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeout));
+            }
+          }
         });
+        
+        // 测试连接
+        const { error } = await supabaseClient.from('student_answers').select('count', { count: 'exact', head: true });
+        if (error) throw error;
+        
         return true;
       } catch (e) {
         console.error('Supabase初始化失败:', e);
@@ -306,17 +320,29 @@
 
     // 本地存储工具函数
     function saveToLocal(key, value) {
-      try { localStorage.setItem(key, JSON.stringify(value)); } catch(e) {}
+      try { 
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(key, JSON.stringify(value)); 
+        }
+      } catch(e) {
+        console.warn('本地存储失败:', e);
+      }
     }
     
     function getFromLocal(key, defaultValue) {
       try {
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : defaultValue;
-      } catch(e) { return defaultValue; }
+        if (typeof localStorage !== 'undefined') {
+          const data = localStorage.getItem(key);
+          return data ? JSON.parse(data) : defaultValue;
+        }
+        return defaultValue;
+      } catch(e) { 
+        console.warn('读取本地存储失败:', e);
+        return defaultValue; 
+      }
     }
 
-    // 缓存已完成学生列表
+    // 缓存已完成学生列表（30秒有效期）
     let cachedCompletedStudents = null;
     let cacheTime = 0;
     
@@ -328,7 +354,10 @@
           return await fn();
         } catch (e) {
           lastError = e;
-          if (i < maxRetries) await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+          console.warn(`请求失败（第${i+1}次）:`, e.message);
+          if (i < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+          }
         }
       }
       throw lastError;
@@ -336,6 +365,7 @@
     
     // 获取已完成学生列表
     async function getCompletedStudents() {
+      // 优先使用缓存
       if (cachedCompletedStudents && Date.now() - cacheTime < 30000) {
         return cachedCompletedStudents;
       }
@@ -358,12 +388,18 @@
     // 获取所有学生答案
     async function getStudentAnswers() {
       try {
-        const { data, error } = await supabaseClient.from('student_answers').select('*');
+        const { data, error } = await withRetry(() => 
+          supabaseClient.from('student_answers').select('*')
+        );
+        
         if (error) throw error;
         const answers = {};
         data.forEach(item => {
-          try { answers[item.student_id] = JSON.parse(item.answers); }
-          catch (e) { console.warn('解析答案失败:', item.student_id, e); }
+          try { 
+            answers[item.student_id] = JSON.parse(item.answers); 
+          } catch (e) { 
+            console.warn('解析答案失败:', item.student_id, e); 
+          }
         });
         return answers;
       } catch (e) {
@@ -383,7 +419,8 @@
         const { error } = await withRetry(() => 
           supabaseClient.from('student_answers').upsert([{
             student_id: studentId,
-            answers: JSON.stringify(answers)
+            answers: JSON.stringify(answers),
+            created_at: new Date().toISOString()
           }], { onConflict: 'student_id' })
         );
         
@@ -396,6 +433,7 @@
           return false;
         }
         
+        // 清空缓存
         cachedCompletedStudents = null;
         return true;
       } catch (e) {
@@ -411,45 +449,63 @@
         const { error } = await withRetry(() => 
           supabaseClient.from('student_answers').delete().not('id', 'is', null)
         );
+        
         if (error) {
           alert(`清空失败: ${error.message || '权限不足'}`);
           return false;
         }
+        
+        // 清空缓存和本地存储
         cachedCompletedStudents = null;
         localStorage.removeItem('device_student_id');
         return true;
       } catch (e) {
         console.error('清空数据异常:', e);
-        alert('清空失败');
+        alert('清空失败，请检查权限或网络');
         return false;
       }
     }
 
-    // 以下所有功能逻辑完全保留，无任何修改
+    // 页面切换函数
     function showPage(pageId) {
-      document.querySelectorAll('.page').forEach(page => page.style.display = 'none');
-      document.getElementById(pageId).style.display = 'block';
+      document.querySelectorAll('.page').forEach(page => {
+        page.style.display = 'none';
+      });
+      const targetPage = document.getElementById(pageId);
+      if (targetPage) {
+        targetPage.style.display = 'block';
+      }
     }
 
+    // 渲染可排序的基地列表
     function renderSortableList() {
       const list = document.getElementById('sortable-list');
+      if (!list) return;
+      
       list.innerHTML = '';
       sortedBases.forEach((base, index) => {
         const div = document.createElement('div');
         div.className = 'base-item';
         div.dataset.index = index;
-        div.innerHTML = `<div class="base-rank">${index + 1}</div><div class="base-name">${base}</div><div class="base-grip">⋮⋮</div>`;
+        div.innerHTML = `
+          <div class="base-rank">${index + 1}</div>
+          <div class="base-name">${base}</div>
+          <div class="base-grip">⋮⋮</div>
+        `;
         div.onmousedown = (e) => handleDragStart(e, index);
         div.ontouchstart = (e) => handleDragStart(e, index);
         list.appendChild(div);
       });
     }
 
+    // 拖拽开始
     function handleDragStart(e, index) {
       e.preventDefault();
       isDragging = true;
       draggedIndex = index;
       draggedElement = e.target.closest('.base-item');
+      
+      if (!draggedElement) return;
       
       const rect = draggedElement.getBoundingClientRect();
       const touch = e.touches ? e.touches[0] : null;
@@ -459,29 +515,34 @@
       const helper = document.getElementById('drag-helper');
       helper.innerHTML = draggedElement.innerHTML;
       helper.style.display = 'block';
-      helper.style.left = rect.left + 'px';
-      helper.style.top = rect.top + 'px';
-      helper.style.width = rect.width + 'px';
+      helper.style.left = `${rect.left}px`;
+      helper.style.top = `${rect.top}px`;
+      helper.style.width = `${rect.width}px`;
       helper.className = 'base-item drag-helper';
       
       draggedElement.style.opacity = '0';
       
+      // 绑定拖拽事件
       document.onmousemove = handleDragMove;
       document.ontouchmove = handleDragMove;
       document.onmouseup = handleDragEnd;
       document.ontouchend = handleDragEnd;
     }
 
+    // 拖拽移动
     function handleDragMove(e) {
-      if (!isDragging) return;
+      if (!isDragging || !draggedElement) return;
+      
       const touch = e.touches ? e.touches[0] : null;
       const x = touch ? touch.clientX : e.clientX;
       const y = touch ? touch.clientY : e.clientY;
       
+      // 更新拖拽辅助元素位置
       const helper = document.getElementById('drag-helper');
-      helper.style.left = (x - dragStartX) + 'px';
-      helper.style.top = (y - dragStartY) + 'px';
+      helper.style.left = `${x - dragStartX}px`;
+      helper.style.top = `${y - dragStartY}px`;
       
+      // 计算目标位置
       const container = document.getElementById('sortable-list');
       const items = Array.from(container.querySelectorAll('.base-item'));
       let targetIndex = -1;
@@ -494,89 +555,129 @@
         }
       });
       
+      // 交换位置
       if (targetIndex !== -1 && targetIndex !== draggedIndex) {
-        const item = sortedBases.splice(draggedIndex, 1)[0];
+        const [item] = sortedBases.splice(draggedIndex, 1);
         sortedBases.splice(targetIndex, 0, item);
         draggedIndex = targetIndex;
         renderSortableList();
       }
     }
 
+    // 拖拽结束
     function handleDragEnd() {
       isDragging = false;
-      document.getElementById('drag-helper').style.display = 'none';
+      draggedElement = null;
+      
+      // 隐藏辅助元素
+      const helper = document.getElementById('drag-helper');
+      helper.style.display = 'none';
+      
+      // 重新渲染列表
       renderSortableList();
+      
+      // 解绑事件
       document.onmousemove = null;
       document.onmouseup = null;
       document.ontouchmove = null;
       document.ontouchend = null;
     }
 
+    // 登录处理
     async function handleLogin() {
       const input = document.getElementById('student-id-input');
       const errorEl = document.getElementById('login-error');
       const loginBtn = document.querySelector('#login-page .btn-primary');
       const studentId = input.value.trim();
       
+      // 清空错误提示
+      errorEl.textContent = '';
+      
+      // 验证学号格式
+      if (!studentId) {
+        errorEl.textContent = '请输入学号';
+        return;
+      }
+      
       if (!VALID_STUDENT_IDS.includes(studentId)) {
         errorEl.textContent = '请输入有效的学号';
         return;
       }
       
+      // 验证设备绑定
       const deviceStudentId = getFromLocal('device_student_id', null);
       if (deviceStudentId !== null && deviceStudentId !== studentId) {
         errorEl.textContent = `该设备已绑定学号 ${deviceStudentId}，请使用该学号登录`;
         return;
       }
       
+      // 禁用按钮防止重复提交
       const originalText = loginBtn.textContent;
       loginBtn.textContent = '验证中...';
       loginBtn.disabled = true;
       
       try {
+        // 检查是否已提交
         const completed = await getCompletedStudents();
         if (completed.includes(studentId)) {
           errorEl.textContent = '您已经提交过问卷了';
           return;
         }
         
+        // 登录成功，进入问卷页面
         currentStudentId = studentId;
-        errorEl.textContent = '';
         input.value = '';
         sortedBases = [...BASES];
         renderSortableList();
         showPage('questionnaire-page');
       } catch (e) {
-        console.error('Login error:', e);
+        console.error('登录验证失败:', e);
         errorEl.textContent = '验证失败，请检查网络连接后重试';
       } finally {
+        // 恢复按钮状态
         loginBtn.textContent = originalText;
         loginBtn.disabled = false;
       }
     }
 
+    // 提交问卷处理
     async function handleSubmit() {
+      if (!currentStudentId) {
+        alert('请先登录');
+        showPage('login-page');
+        return;
+      }
+      
+      if (sortedBases.length !== BASES.length) {
+        alert('请完成所有基地的排序');
+        return;
+      }
+      
       const submitBtn = document.querySelector('#questionnaire-page .btn-primary');
       const originalText = submitBtn.textContent;
       submitBtn.textContent = '提交中...';
       submitBtn.disabled = true;
       
-      const success = await saveStudentAnswer(currentStudentId, sortedBases);
-      
-      submitBtn.textContent = originalText;
-      submitBtn.disabled = false;
-      
-      if (!success) {
-        return;
+      try {
+        const success = await saveStudentAnswer(currentStudentId, sortedBases);
+        
+        if (success) {
+          // 保存设备绑定
+          saveToLocal('device_student_id', currentStudentId);
+          alert('您已完成问卷！感谢您的参与！');
+          showPage('login-page');
+          updateCompletedCount();
+        }
+      } catch (e) {
+        console.error('提交失败:', e);
+        alert('提交失败，请重试');
+      } finally {
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
       }
-      
-      saveToLocal('device_student_id', currentStudentId);
-      
-      alert('您已完成问卷！感谢您的参与！');
-      showPage('login-page');
-      updateCompletedCount();
     }
 
+    // 查看结果处理
     async function handleViewResult() {
       const resultBtn = document.querySelector('#login-page .btn-secondary');
       const originalText = resultBtn.textContent;
@@ -586,14 +687,17 @@
       try {
         const completed = await getCompletedStudents();
         
-        if (completed.length === VALID_STUDENT_IDS.length) {
-          await renderResults();
-          showPage('result-page');
-        } else {
-          alert(`当前已完成 ${completed.length}/28 人\n请等待所有同学填写完毕后再查看结果`);
+        // 检查是否所有人都已提交
+        if (completed.length < VALID_STUDENT_IDS.length) {
+          alert(`当前已完成 ${completed.length}/${VALID_STUDENT_IDS.length} 人\n请等待所有同学填写完毕后再查看结果`);
+          return;
         }
+        
+        // 渲染结果页面
+        await renderResults();
+        showPage('result-page');
       } catch (e) {
-        console.error('Error viewing result:', e);
+        console.error('加载结果失败:', e);
         alert('获取结果失败，请检查网络连接后重试');
       } finally {
         resultBtn.textContent = originalText;
@@ -601,79 +705,149 @@
       }
     }
 
+    // 清空数据处理
     async function handleClearData() {
-      if (confirm('确定要清空所有数据吗？此操作不可撤销！')) {
-        const success = await clearAllData();
-        if (success) {
-          alert('数据已清空');
-          updateCompletedCount();
-        }
+      if (!confirm('确定要清空所有数据吗？此操作不可撤销！')) {
+        return;
+      }
+      
+      const success = await clearAllData();
+      if (success) {
+        alert('数据已清空');
+        updateCompletedCount();
       }
     }
 
+    // 更新已完成人数显示
     async function updateCompletedCount() {
-      const completed = await getCompletedStudents();
-      document.getElementById('completed-count').textContent = completed.length;
+      try {
+        const completed = await getCompletedStudents();
+        const countEl = document.getElementById('completed-count');
+        if (countEl) {
+          countEl.textContent = completed.length;
+        }
+      } catch (e) {
+        console.error('更新完成人数失败:', e);
+      }
     }
 
+    // 渲染结果页面
     async function renderResults() {
       const allAnswers = await getStudentAnswers();
       const allAnswersArray = Object.values(allAnswers);
       const completedCount = allAnswersArray.length;
       
+      // 更新完成人数显示
       document.getElementById('result-completed-count').textContent = completedCount;
       
+      // 初始化统计数据
       const stats = {};
-      BASES.forEach(base => { stats[base] = [0,0,0,0,0,0,0]; });
-      
-      allAnswersArray.forEach(answer => {
-        answer.forEach((base, index) => { if (stats[base]) stats[base][index]++; });
+      BASES.forEach(base => {
+        stats[base] = [0, 0, 0, 0, 0, 0, 0]; // 第1到第7名的次数
       });
       
+      // 统计每个基地的排名次数
+      allAnswersArray.forEach(answer => {
+        answer.forEach((base, index) => {
+          if (stats[base]) {
+            stats[base][index]++;
+          }
+        });
+      });
+      
+      // 计算每个基地的综合得分
       const scores = BASES.map(base => {
         let sum = 0;
-        for (let i = 0; i < 7; i++) sum += stats[base][i] * (7 - i);
-        return { base, score: sum / completedCount, stats: stats[base] };
+        for (let i = 0; i < 7; i++) {
+          sum += stats[base][i] * (7 - i); // 第1名7分，第2名6分...第7名1分
+        }
+        return {
+          base,
+          score: completedCount > 0 ? sum / completedCount : 0,
+          stats: stats[base]
+        };
       });
       
+      // 按得分降序排序
       scores.sort((a, b) => b.score - a.score);
       
+      // 渲染综合排名列表
       const listEl = document.getElementById('result-list');
       listEl.innerHTML = '';
       const medals = ['🥇', '🥈', '🥉'];
+      
       scores.forEach((item, index) => {
         const div = document.createElement('div');
         div.className = 'result-item';
-        div.innerHTML = `<div class="result-rank">${medals[index] || (index + 1)}</div><div class="result-name">${item.base}</div><div class="result-score">${item.score.toFixed(2)} 分</div>`;
+        div.innerHTML = `
+          <div class="result-rank">${medals[index] || (index + 1)}</div>
+          <div class="result-name">${item.base}</div>
+          <div class="result-score">${item.score.toFixed(2)} 分</div>
+        `;
         listEl.appendChild(div);
       });
       
+      // 渲染统计表格
       const tableBody = document.getElementById('stats-table-body');
       tableBody.innerHTML = '';
+      
       scores.forEach(item => {
         const row = document.createElement('tr');
-        row.innerHTML = `<td>${item.base}</td>${item.stats.map(count => `<td>${count}</td>`).join('')}`;
+        row.innerHTML = `
+          <td>${item.base}</td>
+          ${item.stats.map(count => `<td>${count}</td>`).join('')}
+        `;
         tableBody.appendChild(row);
       });
       
+      // 渲染结果分析
       const analysisEl = document.getElementById('result-analysis');
       if (scores.length >= 3) {
-        analysisEl.innerHTML = `<strong>推荐首选基地：</strong>${scores[0].base}（综合得分 ${scores[0].score.toFixed(2)}）<br><br><strong>备选基地：</strong>${scores[1].base}、${scores[2].base}<br><br>此结果基于 ${completedCount} 位同学的意愿统计。`;
-      }
-    }
-
-    async function init() {
-      const success = await initSupabase();
-      document.getElementById('loading-page').style.display = 'none';
-      if (success) {
-        showPage('login-page');
-        await updateCompletedCount();
+        analysisEl.innerHTML = `
+          <strong>推荐首选基地：</strong>${scores[0].base}（综合得分 ${scores[0].score.toFixed(2)}）<br><br>
+          <strong>备选基地：</strong>${scores[1].base}、${scores[2].base}<br><br>
+          此结果基于 ${completedCount} 位同学的意愿统计，综合得分越高表示该基地越受同学们欢迎。
+        `;
+      } else if (scores.length > 0) {
+        analysisEl.innerHTML = `<strong>推荐基地：</strong>${scores[0].base}（综合得分 ${scores[0].score.toFixed(2)}）<br><br>此结果基于 ${completedCount} 位同学的意愿统计。`;
       } else {
-        alert('连接服务器失败，请检查网络连接后重试');
+        analysisEl.innerHTML = '暂无足够数据进行分析';
       }
     }
 
+    // 页面初始化
+    async function init() {
+      try {
+        // 初始化Supabase连接
+        const success = await initSupabase();
+        
+        // 隐藏加载页面
+        document.getElementById('loading-page').style.display = 'none';
+        
+        if (success) {
+          // 显示登录页面
+          showPage('login-page');
+          // 更新已完成人数
+          await updateCompletedCount();
+        } else {
+          alert('连接服务器失败，请检查网络连接后重试');
+        }
+      } catch (e) {
+        console.error('页面初始化失败:', e);
+        document.getElementById('loading-page').style.display = 'none';
+        alert('初始化失败，请刷新页面重试');
+      }
+    }
+
+    // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', init);
+    
+    // 防止页面卸载时的意外操作
+    window.addEventListener('beforeunload', (e) => {
+      if (isDragging) {
+        handleDragEnd();
+      }
+    });
   </script>
 </body>
 </html>
