@@ -113,6 +113,7 @@
       margin-bottom: 12px;
       cursor: grab;
       user-select: none;
+      touch-action: none;
     }
     .base-rank {
       width: 36px;
@@ -130,7 +131,15 @@
     .base-name { flex: 1; font-size: 16px; color: #333; }
     .base-grip { color: #999; font-size: 20px; }
     
-    .drag-helper { position: fixed; z-index: 1000; pointer-events: none; box-shadow: 0 10px 40px rgba(0,0,0,0.2); opacity: 0.9; }
+    .drag-helper { 
+      position: absolute; 
+      z-index: 1000; 
+      pointer-events: none; 
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2); 
+      opacity: 0.95;
+      transform: translateZ(0);
+      -webkit-transform: translateZ(0);
+    }
     
     .result-list { margin-bottom: 24px; }
     .result-item {
@@ -172,11 +181,18 @@
     <div class="card">
       <div class="logo">🏢</div>
       <h1 class="title">实习基地意愿排序</h1>
-      <p class="subtitle">请输入学号登录，参与班级实习基地排序</p>
+      <p class="subtitle">请输入学号+班级密码登录，参与班级实习基地排序</p>
       
+      <!-- 学号输入框 -->
       <div class="input-group">
         <label class="input-label">学号</label>
         <input id="student-id-input" type="text" class="input-field" placeholder="请输入您的学号" maxlength="10">
+      </div>
+
+      <!-- 新增：班级登录密码输入框 -->
+      <div class="input-group">
+        <label class="input-label">班级登录密码</label>
+        <input id="class-password-input" type="password" class="input-field" placeholder="请输入班级专属密码" maxlength="10">
         <span id="login-error" class="error-text"></span>
       </div>
       
@@ -262,6 +278,10 @@
   <div class="footer-note">注：该程序最终解释权归Pray or Predator所有</div>
 
   <script>
+    // 配置所有密码（统一管理，后续修改超方便）
+    const ADMIN_PASSWORD = "999";           // 查看结果/清空数据 密码
+    const CLASS_LOGIN_PASSWORD = "9b666";  // 班级登录密码
+    
     // Supabase配置信息
     const SUPABASE_URL = 'https://axfniyotkeucqkiptjhq.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4Zm5peW90a2V1Y3FraXB0amhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NzM5MzYsImV4cCI6MjA5NjQ0OTkzNn0.DQnbDPjt7_j_MiGzd6bTPpJBzpKncmBw7RykktH0LQ4';
@@ -290,7 +310,6 @@
     // 初始化Supabase客户端
     async function initSupabase() {
       try {
-        // 确保supabase全局对象存在
         if (!window.supabase) {
           console.error('Supabase SDK未加载');
           return false;
@@ -307,7 +326,6 @@
           }
         });
         
-        // 测试连接
         const { error } = await supabaseClient.from('student_answers').select('count', { count: 'exact', head: true });
         if (error) throw error;
         
@@ -342,11 +360,9 @@
       }
     }
 
-    // 缓存已完成学生列表（30秒有效期）
     let cachedCompletedStudents = null;
     let cacheTime = 0;
     
-    // 带重试的请求函数
     async function withRetry(fn, maxRetries = 2) {
       let lastError;
       for (let i = 0; i <= maxRetries; i++) {
@@ -363,9 +379,7 @@
       throw lastError;
     }
     
-    // 获取已完成学生列表
     async function getCompletedStudents() {
-      // 优先使用缓存
       if (cachedCompletedStudents && Date.now() - cacheTime < 30000) {
         return cachedCompletedStudents;
       }
@@ -385,7 +399,6 @@
       }
     }
 
-    // 获取所有学生答案
     async function getStudentAnswers() {
       try {
         const { data, error } = await withRetry(() => 
@@ -408,7 +421,6 @@
       }
     }
 
-    // 保存学生答案
     async function saveStudentAnswer(studentId, answers) {
       if (!supabaseClient) {
         alert('数据库连接失败，请刷新页面重试');
@@ -433,7 +445,6 @@
           return false;
         }
         
-        // 清空缓存
         cachedCompletedStudents = null;
         return true;
       } catch (e) {
@@ -443,7 +454,6 @@
       }
     }
 
-    // 清空所有数据
     async function clearAllData() {
       try {
         const { error } = await withRetry(() => 
@@ -455,7 +465,6 @@
           return false;
         }
         
-        // 清空缓存和本地存储
         cachedCompletedStudents = null;
         localStorage.removeItem('device_student_id');
         return true;
@@ -466,7 +475,6 @@
       }
     }
 
-    // 页面切换函数
     function showPage(pageId) {
       document.querySelectorAll('.page').forEach(page => {
         page.style.display = 'none';
@@ -477,7 +485,6 @@
       }
     }
 
-    // 渲染可排序的基地列表
     function renderSortableList() {
       const list = document.getElementById('sortable-list');
       if (!list) return;
@@ -498,7 +505,6 @@
       });
     }
 
-    // 拖拽开始
     function handleDragStart(e, index) {
       e.preventDefault();
       isDragging = true;
@@ -518,31 +524,30 @@
       helper.style.left = `${rect.left}px`;
       helper.style.top = `${rect.top}px`;
       helper.style.width = `${rect.width}px`;
+      helper.style.height = `${rect.height}px`;
       helper.className = 'base-item drag-helper';
       
-      draggedElement.style.opacity = '0';
+      draggedElement.style.opacity = '0.2';
       
-      // 绑定拖拽事件
-      document.onmousemove = handleDragMove;
-      document.ontouchmove = handleDragMove;
-      document.onmouseup = handleDragEnd;
-      document.ontouchend = handleDragEnd;
+      document.addEventListener('mousemove', handleDragMove, { passive: false });
+      document.addEventListener('touchmove', handleDragMove, { passive: false });
+      document.addEventListener('mouseup', handleDragEnd);
+      document.addEventListener('touchend', handleDragEnd);
+      document.addEventListener('touchcancel', handleDragEnd);
     }
 
-    // 拖拽移动
     function handleDragMove(e) {
       if (!isDragging || !draggedElement) return;
+      e.preventDefault();
       
       const touch = e.touches ? e.touches[0] : null;
       const x = touch ? touch.clientX : e.clientX;
       const y = touch ? touch.clientY : e.clientY;
       
-      // 更新拖拽辅助元素位置
       const helper = document.getElementById('drag-helper');
       helper.style.left = `${x - dragStartX}px`;
       helper.style.top = `${y - dragStartY}px`;
       
-      // 计算目标位置
       const container = document.getElementById('sortable-list');
       const items = Array.from(container.querySelectorAll('.base-item'));
       let targetIndex = -1;
@@ -555,7 +560,6 @@
         }
       });
       
-      // 交换位置
       if (targetIndex !== -1 && targetIndex !== draggedIndex) {
         const [item] = sortedBases.splice(draggedIndex, 1);
         sortedBases.splice(targetIndex, 0, item);
@@ -564,69 +568,78 @@
       }
     }
 
-    // 拖拽结束
     function handleDragEnd() {
+      if (!isDragging) return;
+      
       isDragging = false;
-      draggedElement = null;
-      
-      // 隐藏辅助元素
-      const helper = document.getElementById('drag-helper');
-      helper.style.display = 'none';
-      
-      // 重新渲染列表
+      if (draggedElement) draggedElement.style.opacity = '1';
+      document.getElementById('drag-helper').style.display = 'none';
       renderSortableList();
       
-      // 解绑事件
-      document.onmousemove = null;
-      document.onmouseup = null;
-      document.ontouchmove = null;
-      document.ontouchend = null;
+      document.removeEventListener('mousemove', handleDragMove);
+      document.removeEventListener('touchmove', handleDragMove);
+      document.removeEventListener('mouseup', handleDragEnd);
+      document.removeEventListener('touchend', handleDragEnd);
+      document.removeEventListener('touchcancel', handleDragEnd);
     }
 
-    // 登录处理
+    // ✅ 改造后：双验证登录（学号+班级密码）
     async function handleLogin() {
-      const input = document.getElementById('student-id-input');
+      const studentInput = document.getElementById('student-id-input');
+      const pwdInput = document.getElementById('class-password-input');
       const errorEl = document.getElementById('login-error');
       const loginBtn = document.querySelector('#login-page .btn-primary');
-      const studentId = input.value.trim();
       
-      // 清空错误提示
+      const studentId = studentInput.value.trim();
+      const inputPassword = pwdInput.value.trim();
+      
+      // 清空错误
       errorEl.textContent = '';
       
-      // 验证学号格式
+      // 1. 校验非空
       if (!studentId) {
         errorEl.textContent = '请输入学号';
         return;
       }
-      
-      if (!VALID_STUDENT_IDS.includes(studentId)) {
-        errorEl.textContent = '请输入有效的学号';
+      if (!inputPassword) {
+        errorEl.textContent = '请输入班级登录密码';
         return;
       }
-      
-      // 验证设备绑定
+
+      // 2. 校验学号有效 + 班级密码正确
+      if (!VALID_STUDENT_IDS.includes(studentId)) {
+        errorEl.textContent = '请输入有效的班级学号';
+        return;
+      }
+      if (inputPassword !== CLASS_LOGIN_PASSWORD) {
+        errorEl.textContent = '班级密码错误，请重新输入';
+        return;
+      }
+
+      // 3. 设备绑定校验（原有功能保留）
       const deviceStudentId = getFromLocal('device_student_id', null);
       if (deviceStudentId !== null && deviceStudentId !== studentId) {
         errorEl.textContent = `该设备已绑定学号 ${deviceStudentId}，请使用该学号登录`;
         return;
       }
       
-      // 禁用按钮防止重复提交
+      // 按钮状态
       const originalText = loginBtn.textContent;
       loginBtn.textContent = '验证中...';
       loginBtn.disabled = true;
       
       try {
-        // 检查是否已提交
+        // 4. 校验是否已提交
         const completed = await getCompletedStudents();
         if (completed.includes(studentId)) {
           errorEl.textContent = '您已经提交过问卷了';
           return;
         }
         
-        // 登录成功，进入问卷页面
+        // 登录成功
         currentStudentId = studentId;
-        input.value = '';
+        studentInput.value = '';
+        pwdInput.value = '';
         sortedBases = [...BASES];
         renderSortableList();
         showPage('questionnaire-page');
@@ -634,13 +647,11 @@
         console.error('登录验证失败:', e);
         errorEl.textContent = '验证失败，请检查网络连接后重试';
       } finally {
-        // 恢复按钮状态
         loginBtn.textContent = originalText;
         loginBtn.disabled = false;
       }
     }
 
-    // 提交问卷处理
     async function handleSubmit() {
       if (!currentStudentId) {
         alert('请先登录');
@@ -662,7 +673,6 @@
         const success = await saveStudentAnswer(currentStudentId, sortedBases);
         
         if (success) {
-          // 保存设备绑定
           saveToLocal('device_student_id', currentStudentId);
           alert('您已完成问卷！感谢您的参与！');
           showPage('login-page');
@@ -677,7 +687,7 @@
       }
     }
 
-    // 查看结果处理
+    // 查看结果（密码：999）
     async function handleViewResult() {
       const resultBtn = document.querySelector('#login-page .btn-secondary');
       const originalText = resultBtn.textContent;
@@ -687,13 +697,17 @@
       try {
         const completed = await getCompletedStudents();
         
-        // 检查是否所有人都已提交
         if (completed.length < VALID_STUDENT_IDS.length) {
           alert(`当前已完成 ${completed.length}/${VALID_STUDENT_IDS.length} 人\n请等待所有同学填写完毕后再查看结果`);
           return;
         }
         
-        // 渲染结果页面
+        const inputPwd = prompt('请输入管理员密码，方可查看结果：');
+        if (inputPwd !== ADMIN_PASSWORD) {
+          alert('密码错误，无权查看结果！');
+          return;
+        }
+
         await renderResults();
         showPage('result-page');
       } catch (e) {
@@ -705,20 +719,23 @@
       }
     }
 
-    // 清空数据处理
+    // 清空数据（密码：999）
     async function handleClearData() {
-      if (!confirm('确定要清空所有数据吗？此操作不可撤销！')) {
+      const inputPwd = prompt('请输入管理员密码，方可清空数据：');
+      if (inputPwd !== ADMIN_PASSWORD) {
+        alert('密码错误，无权清空数据！');
         return;
       }
-      
-      const success = await clearAllData();
-      if (success) {
-        alert('数据已清空');
-        updateCompletedCount();
+
+      if (confirm('确定要清空所有数据吗？此操作不可撤销！')) {
+        const success = await clearAllData();
+        if (success) {
+          alert('数据已清空');
+          updateCompletedCount();
+        }
       }
     }
 
-    // 更新已完成人数显示
     async function updateCompletedCount() {
       try {
         const completed = await getCompletedStudents();
@@ -731,22 +748,18 @@
       }
     }
 
-    // 渲染结果页面
     async function renderResults() {
       const allAnswers = await getStudentAnswers();
       const allAnswersArray = Object.values(allAnswers);
       const completedCount = allAnswersArray.length;
       
-      // 更新完成人数显示
       document.getElementById('result-completed-count').textContent = completedCount;
       
-      // 初始化统计数据
       const stats = {};
       BASES.forEach(base => {
-        stats[base] = [0, 0, 0, 0, 0, 0, 0]; // 第1到第7名的次数
+        stats[base] = [0, 0, 0, 0, 0, 0, 0];
       });
       
-      // 统计每个基地的排名次数
       allAnswersArray.forEach(answer => {
         answer.forEach((base, index) => {
           if (stats[base]) {
@@ -755,11 +768,10 @@
         });
       });
       
-      // 计算每个基地的综合得分
       const scores = BASES.map(base => {
         let sum = 0;
         for (let i = 0; i < 7; i++) {
-          sum += stats[base][i] * (7 - i); // 第1名7分，第2名6分...第7名1分
+          sum += stats[base][i] * (7 - i);
         }
         return {
           base,
@@ -768,10 +780,8 @@
         };
       });
       
-      // 按得分降序排序
       scores.sort((a, b) => b.score - a.score);
       
-      // 渲染综合排名列表
       const listEl = document.getElementById('result-list');
       listEl.innerHTML = '';
       const medals = ['🥇', '🥈', '🥉'];
@@ -787,7 +797,6 @@
         listEl.appendChild(div);
       });
       
-      // 渲染统计表格
       const tableBody = document.getElementById('stats-table-body');
       tableBody.innerHTML = '';
       
@@ -800,7 +809,6 @@
         tableBody.appendChild(row);
       });
       
-      // 渲染结果分析
       const analysisEl = document.getElementById('result-analysis');
       if (scores.length >= 3) {
         analysisEl.innerHTML = `
@@ -815,19 +823,13 @@
       }
     }
 
-    // 页面初始化
     async function init() {
       try {
-        // 初始化Supabase连接
         const success = await initSupabase();
-        
-        // 隐藏加载页面
         document.getElementById('loading-page').style.display = 'none';
         
         if (success) {
-          // 显示登录页面
           showPage('login-page');
-          // 更新已完成人数
           await updateCompletedCount();
         } else {
           alert('连接服务器失败，请检查网络连接后重试');
@@ -839,10 +841,8 @@
       }
     }
 
-    // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', init);
     
-    // 防止页面卸载时的意外操作
     window.addEventListener('beforeunload', (e) => {
       if (isDragging) {
         handleDragEnd();
