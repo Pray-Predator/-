@@ -8,7 +8,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacFont, 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
       padding: 20px;
@@ -113,7 +113,9 @@
       cursor: grab;
       user-select: none;
       touch-action: none;
+      transition: transform 0.15s ease;
     }
+    .base-item.dragging { opacity: 0.3; }
     .base-rank {
       width: 36px;
       height: 36px;
@@ -136,6 +138,8 @@
       pointer-events: none; 
       opacity: 0.95;
       box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      border-radius: 12px;
+      background: white;
     }
     
     .result-list { margin-bottom: 24px; }
@@ -285,9 +289,10 @@
     let currentStudentId = null;
     let sortedBases = [];
     let isDragging = false;
-    let draggedElement = null;
     let draggedIndex = -1;
     let offsetX = 0, offsetY = 0;
+    const listContainer = () => document.getElementById('sortable-list');
+    const dragHelper = () => document.getElementById('drag-helper');
 
     // 有效学号列表
     const VALID_STUDENT_IDS = [
@@ -406,7 +411,7 @@
           try { 
             answers[item.student_id] = JSON.parse(item.answers); 
           } catch (e) { 
-            console.warn('解析答案失败:', item.student, e); 
+            console.warn('解析答案失败:', item.student_id, e); 
           }
         });
         return answers;
@@ -481,7 +486,7 @@
     }
 
     function renderSortableList() {
-      const list = document.getElementById('sortable-list');
+      const list = listContainer();
       if (!list) return;
       
       list.innerHTML = '';
@@ -494,89 +499,124 @@
           <div class="base-name">${base}</div>
           <div class="base-grip">⋮⋮</div>
         `;
-        div.onmousedown = (e) => handleDragStart(e, index);
-        div.ontouchstart = (e) => handleDragStart(e, index);
+        div.addEventListener('mousedown', (e) => handleDragStart(e, index));
+        div.addEventListener('touchstart', (e) => handleDragStart(e, index), { passive: false });
         list.appendChild(div);
       });
     }
 
-    // 拖拽开始（完美对齐光标）
+    // ========== 重写拖拽逻辑（彻底修复弹回问题） ==========
     function handleDragStart(e, index) {
       e.preventDefault();
       isDragging = true;
       draggedIndex = index;
-      draggedElement = e.target.closest('.base-item');
-      
-      if (!draggedElement) return;
+      const currentItem = e.target.closest('.base-item');
+      if (!currentItem) return;
 
+      // 计算光标偏移
       const clientX = e.clientX || e.touches[0].clientX;
       const clientY = e.clientY || e.touches[0].clientY;
-      const rect = draggedElement.getBoundingClientRect();
+      const rect = currentItem.getBoundingClientRect();
       offsetX = clientX - rect.left;
       offsetY = clientY - rect.top;
 
-      const helper = document.getElementById('drag-helper');
-      helper.innerHTML = draggedElement.innerHTML;
+      // 初始化拖拽跟随框
+      const helper = dragHelper();
+      helper.innerHTML = currentItem.innerHTML;
       helper.style.width = rect.width + 'px';
       helper.style.height = rect.height + 'px';
-      helper.style.left = (clientX - offsetX) + 'px';
-      helper.style.top = (clientY - offsetY) + 'px';
+      helper.style.left = rect.left + 'px';
+      helper.style.top = rect.top + 'px';
       helper.style.display = 'flex';
+      helper.className = 'base-item drag-helper';
 
-      draggedElement.style.opacity = '0.4';
+      // 原元素半透明
+      currentItem.classList.add('dragging');
 
+      // 绑定事件
       document.addEventListener('mousemove', handleDragMove);
       document.addEventListener('touchmove', handleDragMove, { passive: false });
       document.addEventListener('mouseup', handleDragEnd);
       document.addEventListener('touchend', handleDragEnd);
+      document.addEventListener('touchcancel', handleDragEnd);
     }
 
-    // 拖拽移动（修复排序交换逻辑）
     function handleDragMove(e) {
-      if (!isDragging || !draggedElement) return;
+      if (!isDragging) return;
       e.preventDefault();
 
       const clientX = e.clientX || e.touches[0].clientX;
       const clientY = e.clientY || e.touches[0].clientY;
-      const helper = document.getElementById('drag-helper');
+      const helper = dragHelper();
+      const list = listContainer();
+      const items = Array.from(list.querySelectorAll('.base-item:not(.drag-helper)'));
+
+      // 跟随框完美对齐光标
       helper.style.left = (clientX - offsetX) + 'px';
       helper.style.top = (clientY - offsetY) + 'px';
 
-      // 核心修复：精准判断位置并交换排序
-      const items = document.querySelectorAll('.base-item');
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const itemRect = item.getBoundingClientRect();
-        const midPoint = itemRect.top + itemRect.height / 2;
-        
-        if (clientY < midPoint && i < draggedIndex) {
-          sortedBases.splice(i, 0, sortedBases.splice(draggedIndex, 1)[0]);
-          draggedIndex = i;
-          renderSortableList();
-          break;
-        } else if (clientY > midPoint && i > draggedIndex) {
-          sortedBases.splice(i, 0, sortedBases.splice(draggedIndex, 1)[0]);
-          draggedIndex = i;
-          renderSortableList();
-          break;
+      // 计算目标位置（按元素中点判断）
+      let targetIndex = -1;
+      items.forEach((item, i) => {
+        const rect = item.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (clientY < midY && targetIndex === -1) {
+          targetIndex = i;
         }
+      });
+      if (targetIndex === -1) targetIndex = items.length;
+      if (targetIndex > 0 && clientY > items[items.length-1].getBoundingClientRect().bottom) {
+        targetIndex = items.length;
+      }
+
+      // 边界修正
+      targetIndex = Math.max(0, Math.min(items.length - 1, targetIndex));
+
+      // 位置变化时，仅交换DOM，不重渲染整个列表
+      if (targetIndex !== draggedIndex) {
+        const draggedItem = items[draggedIndex];
+        const targetItem = items[targetIndex];
+        
+        if (targetIndex < draggedIndex) {
+          list.insertBefore(draggedItem, targetItem);
+        } else {
+          list.insertBefore(draggedItem, targetItem.nextSibling);
+        }
+        
+        draggedIndex = targetIndex;
+        // 更新所有元素的序号显示
+        updateItemRanks();
       }
     }
 
-    // 拖拽结束
+    function updateItemRanks() {
+      const items = listContainer().querySelectorAll('.base-item');
+      items.forEach((item, i) => {
+        item.querySelector('.base-rank').textContent = i + 1;
+        item.dataset.index = i;
+      });
+    }
+
     function handleDragEnd() {
       if (!isDragging) return;
-      
       isDragging = false;
-      if (draggedElement) draggedElement.style.opacity = '1';
-      document.getElementById('drag-helper').style.display = 'none';
+
+      // 同步最终顺序到数据数组
+      const finalItems = Array.from(listContainer().querySelectorAll('.base-item'));
+      sortedBases = finalItems.map(item => item.querySelector('.base-name').textContent);
+
+      // 清理拖拽状态，重新渲染列表（恢复样式）
+      dragHelper().style.display = 'none';
       renderSortableList();
 
+      // 解绑事件
       document.removeEventListener('mousemove', handleDragMove);
       document.removeEventListener('touchmove', handleDragMove);
       document.removeEventListener('mouseup', handleDragEnd);
       document.removeEventListener('touchend', handleDragEnd);
+      document.removeEventListener('touchcancel', handleDragEnd);
     }
+    // ========== 拖拽逻辑修复结束 ==========
 
     // 登录功能（双验证：学号+班级密码）
     async function handleLogin() {
