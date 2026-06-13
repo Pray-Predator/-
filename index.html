@@ -132,13 +132,11 @@
     .base-grip { color: #999; font-size: 20px; }
     
     .drag-helper { 
-      position: absolute; 
-      z-index: 1000; 
+      position: fixed; 
+      z-index: 9999; 
       pointer-events: none; 
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2); 
       opacity: 0.95;
-      transform: translateZ(0);
-      -webkit-transform: translateZ(0);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
     }
     
     .result-list { margin-bottom: 24px; }
@@ -183,13 +181,11 @@
       <h1 class="title">实习基地意愿排序</h1>
       <p class="subtitle">请输入学号+班级密码登录，参与班级实习基地排序</p>
       
-      <!-- 学号输入框 -->
       <div class="input-group">
         <label class="input-label">学号</label>
         <input id="student-id-input" type="text" class="input-field" placeholder="请输入您的学号" maxlength="10">
       </div>
 
-      <!-- 新增：班级登录密码输入框 -->
       <div class="input-group">
         <label class="input-label">班级登录密码</label>
         <input id="class-password-input" type="password" class="input-field" placeholder="请输入班级专属密码" maxlength="10">
@@ -278,9 +274,9 @@
   <div class="footer-note">注：该程序最终解释权归Pray or Predator所有</div>
 
   <script>
-    // 配置所有密码（统一管理，后续修改超方便）
-    const ADMIN_PASSWORD = "999";           // 查看结果/清空数据 密码
-    const CLASS_LOGIN_PASSWORD = "9b666";  // 班级登录密码
+    // 配置所有密码
+    const ADMIN_PASSWORD = "999";
+    const CLASS_LOGIN_PASSWORD = "9b666";
     
     // Supabase配置信息
     const SUPABASE_URL = 'https://axfniyotkeucqkiptjhq.supabase.co';
@@ -292,7 +288,7 @@
     let isDragging = false;
     let draggedElement = null;
     let draggedIndex = -1;
-    let dragStartX = 0, dragStartY = 0;
+    let offsetX = 0, offsetY = 0;
 
     // 有效学号列表
     const VALID_STUDENT_IDS = [
@@ -505,6 +501,7 @@
       });
     }
 
+    // ====================== 修复后的拖拽逻辑（完美对齐光标）======================
     function handleDragStart(e, index) {
       e.preventDefault();
       isDragging = true;
@@ -512,60 +509,61 @@
       draggedElement = e.target.closest('.base-item');
       
       if (!draggedElement) return;
-      
+
+      // 精准计算光标偏移量
+      const clientX = e.clientX || e.touches[0].clientX;
+      const clientY = e.clientY || e.touches[0].clientY;
       const rect = draggedElement.getBoundingClientRect();
-      const touch = e.touches ? e.touches[0] : null;
-      dragStartX = (touch ? touch.clientX : e.clientX) - rect.left;
-      dragStartY = (touch ? touch.clientY : e.clientY) - rect.top;
-      
+      offsetX = clientX - rect.left;
+      offsetY = clientY - rect.top;
+
+      // 创建拖拽跟随元素（完全对齐光标）
       const helper = document.getElementById('drag-helper');
       helper.innerHTML = draggedElement.innerHTML;
-      helper.style.display = 'block';
-      helper.style.left = `${rect.left}px`;
-      helper.style.top = `${rect.top}px`;
-      helper.style.width = `${rect.width}px`;
-      helper.style.height = `${rect.height}px`;
       helper.className = 'base-item drag-helper';
-      
-      draggedElement.style.opacity = '0.2';
-      
-      document.addEventListener('mousemove', handleDragMove, { passive: false });
+      helper.style.width = rect.width + 'px';
+      helper.style.left = (clientX - offsetX) + 'px';
+      helper.style.top = (clientY - offsetY) + 'px';
+      helper.style.display = 'flex';
+
+      // 原元素半透明
+      draggedElement.style.opacity = '0.4';
+
+      // 绑定移动/结束事件
+      document.addEventListener('mousemove', handleDragMove);
       document.addEventListener('touchmove', handleDragMove, { passive: false });
       document.addEventListener('mouseup', handleDragEnd);
       document.addEventListener('touchend', handleDragEnd);
-      document.addEventListener('touchcancel', handleDragEnd);
     }
 
     function handleDragMove(e) {
       if (!isDragging || !draggedElement) return;
       e.preventDefault();
-      
-      const touch = e.touches ? e.touches[0] : null;
-      const x = touch ? touch.clientX : e.clientX;
-      const y = touch ? touch.clientY : e.clientY;
-      
+
+      const clientX = e.clientX || e.touches[0].clientX;
+      const clientY = e.clientY || e.touches[0].clientY;
       const helper = document.getElementById('drag-helper');
-      helper.style.left = `${x - dragStartX}px`;
-      helper.style.top = `${y - dragStartY}px`;
-      
-      const container = document.getElementById('sortable-list');
-      const items = Array.from(container.querySelectorAll('.base-item'));
-      let targetIndex = -1;
-      
-      items.forEach((item, idx) => {
-        if (item === draggedElement) return;
-        const rect = item.getBoundingClientRect();
-        if (y < rect.bottom && y > rect.top) {
-          targetIndex = parseInt(item.dataset.index);
+
+      // 拖拽元素100%跟随光标
+      helper.style.left = (clientX - offsetX) + 'px';
+      helper.style.top = (clientY - offsetY) + 'px';
+
+      // 计算交换位置
+      const items = Array.from(document.querySelectorAll('.base-item'));
+      items.forEach((item) => {
+        const itemRect = item.getBoundingClientRect();
+        if (
+          clientY > itemRect.top &&
+          clientY < itemRect.bottom &&
+          parseInt(item.dataset.index) !== draggedIndex
+        ) {
+          const targetIndex = parseInt(item.dataset.index);
+          const [item] = sortedBases.splice(draggedIndex, 1);
+          sortedBases.splice(targetIndex, 0, item);
+          draggedIndex = targetIndex;
+          renderSortableList();
         }
       });
-      
-      if (targetIndex !== -1 && targetIndex !== draggedIndex) {
-        const [item] = sortedBases.splice(draggedIndex, 1);
-        sortedBases.splice(targetIndex, 0, item);
-        draggedIndex = targetIndex;
-        renderSortableList();
-      }
     }
 
     function handleDragEnd() {
@@ -575,15 +573,16 @@
       if (draggedElement) draggedElement.style.opacity = '1';
       document.getElementById('drag-helper').style.display = 'none';
       renderSortableList();
-      
+
+      // 解绑事件
       document.removeEventListener('mousemove', handleDragMove);
       document.removeEventListener('touchmove', handleDragMove);
       document.removeEventListener('mouseup', handleDragEnd);
       document.removeEventListener('touchend', handleDragEnd);
-      document.removeEventListener('touchcancel', handleDragEnd);
     }
+    // ====================== 拖拽修复完成 ======================
 
-    // ✅ 改造后：双验证登录（学号+班级密码）
+    // 登录功能（双验证：学号+班级密码）
     async function handleLogin() {
       const studentInput = document.getElementById('student-id-input');
       const pwdInput = document.getElementById('class-password-input');
@@ -593,10 +592,8 @@
       const studentId = studentInput.value.trim();
       const inputPassword = pwdInput.value.trim();
       
-      // 清空错误
       errorEl.textContent = '';
       
-      // 1. 校验非空
       if (!studentId) {
         errorEl.textContent = '请输入学号';
         return;
@@ -606,7 +603,6 @@
         return;
       }
 
-      // 2. 校验学号有效 + 班级密码正确
       if (!VALID_STUDENT_IDS.includes(studentId)) {
         errorEl.textContent = '请输入有效的班级学号';
         return;
@@ -616,27 +612,23 @@
         return;
       }
 
-      // 3. 设备绑定校验（原有功能保留）
       const deviceStudentId = getFromLocal('device_student_id', null);
       if (deviceStudentId !== null && deviceStudentId !== studentId) {
         errorEl.textContent = `该设备已绑定学号 ${deviceStudentId}，请使用该学号登录`;
         return;
       }
       
-      // 按钮状态
       const originalText = loginBtn.textContent;
       loginBtn.textContent = '验证中...';
       loginBtn.disabled = true;
       
       try {
-        // 4. 校验是否已提交
         const completed = await getCompletedStudents();
         if (completed.includes(studentId)) {
           errorEl.textContent = '您已经提交过问卷了';
           return;
         }
         
-        // 登录成功
         currentStudentId = studentId;
         studentInput.value = '';
         pwdInput.value = '';
