@@ -8,7 +8,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacFont, 'Segoe UI', sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
       padding: 20px;
@@ -88,7 +88,6 @@
     .completion-label { font-size: 14px; color: #666; text-align: center; }
     
     .page { display: none; }
-    .page.active { display: block; }
     
     .back-btn {
       background: none;
@@ -407,7 +406,7 @@
           try { 
             answers[item.student_id] = JSON.parse(item.answers); 
           } catch (e) { 
-            console.warn('解析答案失败:', item.student_id, e); 
+            console.warn('解析答案失败:', item.student, e); 
           }
         });
         return answers;
@@ -501,7 +500,7 @@
       });
     }
 
-    // ====================== 修复后的拖拽逻辑（完美对齐光标）======================
+    // 拖拽开始（完美对齐光标）
     function handleDragStart(e, index) {
       e.preventDefault();
       isDragging = true;
@@ -510,32 +509,29 @@
       
       if (!draggedElement) return;
 
-      // 精准计算光标偏移量
       const clientX = e.clientX || e.touches[0].clientX;
       const clientY = e.clientY || e.touches[0].clientY;
       const rect = draggedElement.getBoundingClientRect();
       offsetX = clientX - rect.left;
       offsetY = clientY - rect.top;
 
-      // 创建拖拽跟随元素（完全对齐光标）
       const helper = document.getElementById('drag-helper');
       helper.innerHTML = draggedElement.innerHTML;
-      helper.className = 'base-item drag-helper';
       helper.style.width = rect.width + 'px';
+      helper.style.height = rect.height + 'px';
       helper.style.left = (clientX - offsetX) + 'px';
       helper.style.top = (clientY - offsetY) + 'px';
       helper.style.display = 'flex';
 
-      // 原元素半透明
       draggedElement.style.opacity = '0.4';
 
-      // 绑定移动/结束事件
       document.addEventListener('mousemove', handleDragMove);
       document.addEventListener('touchmove', handleDragMove, { passive: false });
       document.addEventListener('mouseup', handleDragEnd);
       document.addEventListener('touchend', handleDragEnd);
     }
 
+    // 拖拽移动（修复排序交换逻辑）
     function handleDragMove(e) {
       if (!isDragging || !draggedElement) return;
       e.preventDefault();
@@ -543,29 +539,31 @@
       const clientX = e.clientX || e.touches[0].clientX;
       const clientY = e.clientY || e.touches[0].clientY;
       const helper = document.getElementById('drag-helper');
-
-      // 拖拽元素100%跟随光标
       helper.style.left = (clientX - offsetX) + 'px';
       helper.style.top = (clientY - offsetY) + 'px';
 
-      // 计算交换位置
-      const items = Array.from(document.querySelectorAll('.base-item'));
-      items.forEach((item) => {
+      // 核心修复：精准判断位置并交换排序
+      const items = document.querySelectorAll('.base-item');
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
         const itemRect = item.getBoundingClientRect();
-        if (
-          clientY > itemRect.top &&
-          clientY < itemRect.bottom &&
-          parseInt(item.dataset.index) !== draggedIndex
-        ) {
-          const targetIndex = parseInt(item.dataset.index);
-          const [item] = sortedBases.splice(draggedIndex, 1);
-          sortedBases.splice(targetIndex, 0, item);
-          draggedIndex = targetIndex;
+        const midPoint = itemRect.top + itemRect.height / 2;
+        
+        if (clientY < midPoint && i < draggedIndex) {
+          sortedBases.splice(i, 0, sortedBases.splice(draggedIndex, 1)[0]);
+          draggedIndex = i;
           renderSortableList();
+          break;
+        } else if (clientY > midPoint && i > draggedIndex) {
+          sortedBases.splice(i, 0, sortedBases.splice(draggedIndex, 1)[0]);
+          draggedIndex = i;
+          renderSortableList();
+          break;
         }
-      });
+      }
     }
 
+    // 拖拽结束
     function handleDragEnd() {
       if (!isDragging) return;
       
@@ -574,13 +572,11 @@
       document.getElementById('drag-helper').style.display = 'none';
       renderSortableList();
 
-      // 解绑事件
       document.removeEventListener('mousemove', handleDragMove);
       document.removeEventListener('touchmove', handleDragMove);
       document.removeEventListener('mouseup', handleDragEnd);
       document.removeEventListener('touchend', handleDragEnd);
     }
-    // ====================== 拖拽修复完成 ======================
 
     // 登录功能（双验证：学号+班级密码）
     async function handleLogin() {
